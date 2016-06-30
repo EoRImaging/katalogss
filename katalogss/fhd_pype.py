@@ -1,29 +1,40 @@
 import numpy as np
 import os
 from scipy.io import readsav
+from warnings import warn
 from astropy.io import fits
 
-global fhd_base 
-fhd_base = '/nfs/eor-09/r1/djc/EoR2013/Aug23/'
+
+global _fhd_base
+_fhd_base = '/nfs/eor-09/r1/djc/EoR2013/Aug23/'
+
+
+def fhd_base():
+    global fhd_base
+    return _fhd_base
+
 
 def set_fhd_base(path):
-    global fhd_base
+    global _fhd_base
     if not path.endswith('/'): path+='/'
-    fhd_base = path
+    _fhd_base = path
+    if not os.path.exists(_fhd_base): raise ValueError,'%s does not exist. Use `set_fhd_base` to update.'%_fhd_base
     return
 
 
 def get_obslist(fhd_run):
-    decon_dir='%sfhd_%s/deconvolution/'%(fhd_base,fhd_run)
+    decon_dir='%sfhd_%s/deconvolution/'%(fhd_base(),fhd_run)
     obs=os.listdir(decon_dir)
     obs=[o[:10] for o in obs if o.endswith('fhd.sav')]
     obs.sort() 
     return obs
 
 
-def read_sourcelist(fhdsav, tag='component_array', keys=('id','x','y','ra','dec','flux','gain','alpha','freq')):
+def read_sourcelist(fhdsav, tag='component_array', keys=('id','x','y','ra','dec','flux','gain','alpha','freq','flag')):
 	cat = readsav(fhdsav)[tag]
-        items = [cat.id,cat.x,cat.y,cat.ra,cat.dec,np.vstack(cat.flux).T['i'][0],cat.gain,cat.alpha, cat.freq]
+        items = [cat.id, cat.x, cat.y, cat.ra, cat.dec, 
+                 np.vstack(cat.flux).T['i'][0],
+                 cat.gain,cat.alpha, cat.freq, cat.flag]
         items = [item.astype(np.float64) for item in items]
         cat = dict(zip(keys,items))
 	return cat
@@ -39,6 +50,7 @@ def gen_cal_cat(cat, freq=180., alpha=-0.8, file_path='catalog.sav'):
     else: cat['freq']=float(freq)*np.ones(nsrcs)
     import pidly
     idl=pidly.IDL()
+    idl('!Quiet=1')
     idl.id=cat['id']
     idl.ra=cat['ra']
     idl.dec=cat['dec']
@@ -53,22 +65,22 @@ def gen_cal_cat(cat, freq=180., alpha=-0.8, file_path='catalog.sav'):
 
 
 def fetch_comps(fhd_run, obsids=None, cache=True):
-    decon_dir='%sfhd_%s/deconvolution/'%(fhd_base,fhd_run)
-    meta_dir='%sfhd_%s/metadata/'%(fhd_base,fhd_run)
+    decon_dir='%sfhd_%s/deconvolution/'%(fhd_base(),fhd_run)
+    meta_dir='%sfhd_%s/metadata/'%(fhd_base(),fhd_run)
     if obsids is None: obsids = get_obslist(decon_dir)
     comps={} 
     for o in obsids:
+        print 'Fetching compoonent array from %s_fhd.sav'%o
         fhdsav=decon_dir+o+'_fhd.sav'
-	print 'fetching data for obsid: %s'%o
 	comps[o] = read_sourcelist(fhdsav)
     return comps
 
 
 def fetch_meta(fhd_run, obsids=None):
-    decon_dir='%sfhd_%s/deconvolution/'%(fhd_base,fhd_run)
-    meta_dir='%sfhd_%s/metadata/'%(fhd_base,fhd_run)
+    decon_dir='%sfhd_%s/deconvolution/'%(fhd_base(),fhd_run)
+    meta_dir='%sfhd_%s/metadata/'%(fhd_base(),fhd_run)
     if obsids is None: obsids = fp.get_obslist(decon_dir)
-    meta = {}
+    meta = {'clustered':False}
     for o in obsids:
         params = readsav(decon_dir+o+'_fhd_params.sav')['fhd_params']       
         metaobs = readsav('%s%s_obs.sav'%(meta_dir,o))['obs']
@@ -79,17 +91,17 @@ def fetch_meta(fhd_run, obsids=None):
 
 def pixarea_maps(fhd_run, obsids=None, map_dir='area_maps/', recalculate=False):
     if not os.path.exists(map_dir): os.system('mkdir %s'%map_dir)
-    if not map_dir.endswith('/') map_dir += '/'
+    if not map_dir.endswith('/'): map_dir += '/'
     if obsids is None: obsids = fp.get_obslist(decon_dir)
     calcobs = [o for o in obsids if recalculate or not os.path.exists(map_dir+o+'_amap.fits')]
     if len(calcobs)>0:
         import pidly
         idl=pidly.IDL()
-        idl.fhddir='%sfhd_%s/'%(fhd_base,fhd_run)
+        idl.fhddir='%sfhd_%s/'%(fhd_base(),fhd_run)
         idl.mapdir = map_dir
         for o in calcobs:
             idl.obsid=o
-            commands = ['restore,fhddir+\'metadata/\'+obsid+\'_obs.sav\'',
+            commands = ['!quiet=1','!except=0','restore,fhddir+\'metadata/\'+obsid+\'_obs.sav\'',
                     'area_map=pixel_area(obs)',
                     'beam_width = 1/obs.max_baseline',
                     'beam_area = !pi*beam_width^2/(4*alog(2))',
@@ -102,7 +114,7 @@ def pixarea_maps(fhd_run, obsids=None, map_dir='area_maps/', recalculate=False):
 
 
 def get_maps(fhd_run, obsids, imtype):
-    map_dir='%sfhd_%s/output_data/'%(fhd_base,fhd_run)
+    map_dir='%sfhd_%s/output_data/'%(fhd_base(),fhd_run)
     imgs = {}
     for o in obsids:
         fname = map_dir+o+'_'+imtype+'.fits'
@@ -111,4 +123,5 @@ def get_maps(fhd_run, obsids, imtype):
             imgs[o] = hdu
         else: imgs[o] = None
     return imgs
+
 
