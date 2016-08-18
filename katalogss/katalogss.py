@@ -1,9 +1,15 @@
+'''
+Generate source catalogs from FHD deconvolution output.
+'''
+
+
 import numpy as np
 import pandas as pd
 from astropy.wcs import WCS
 from astropy.modeling import models, fitting
 from sklearn.cluster import DBSCAN
-from utils import centroid, sigma_clip
+from kg_utils import centroid, sigma_clip
+
 
 def clip_comps(comps, nmax=None):
      ''' 
@@ -11,10 +17,10 @@ def clip_comps(comps, nmax=None):
 
      Parameters
      ----------
-     comps : `pandas.DataFrame`
-         The deconvolved souce components. A \'flag\' column is expected.
-     nmax : int
-         The maximum number of comonents to keep.
+     comps: `pandas.DataFrame`
+         Deconvolved souce components. A \'flag\' column is expected.
+     nmax: `int`
+         Maximum number of comonents to keep.
      '''
 
      comps = comps[comps.flag==0]
@@ -30,12 +36,12 @@ def cluster_sources(sources, eps, min_samples=1):
 
      Parameters
      ----------
-     sources : `pandas.DataFrame`
-         The sources or components to be clustered. \'ra\' and \'dec\' columns are expected.
-     eps : float
-         The radius within which two points are considered part of the same source. 
-     min_samples : int, optional
-         The minimum number of sources needed to define a cluster. The default is 1.
+     sources: `pandas.DataFrame`
+         Sources or components to be clustered. \'ra\' and \'dec\' columns are expected.
+     eps: `float`
+         Radius within which two points are considered part of the same source. 
+     min_samples: `int`, optional
+         Minimum number of sources needed to define a cluster. The default is 1.
      '''
 
      a,b = sources[['ra','dec']].values.T
@@ -52,8 +58,8 @@ def _calc_source_params(comps, labelset=None):
 
      Parameters
      ----------
-     comps : pandas.DataFrame
-          The components data frame indexed by cluster label. \'ra\', \'dec\', \'flux\', and \'gain\' columns are expected. 
+     comps: `pandas.DataFrame`
+          Components data frame indexed by cluster label. \'ra\', \'dec\', \'flux\', and \'gain\' columns are expected. 
      '''
 
      labelset = set(comps.index)
@@ -71,31 +77,43 @@ def _calc_source_params(comps, labelset=None):
      return pd.DataFrame(columns=keys, data=params)
 
 
-def _calc_local_rms(residual, coords, width=20, sig_clip=1):   
+def _calc_local_rms(residual, coords, width=20, sig_clip=None):   
      '''
      Calculate the rms of residual image within a specified box region.
 
      Parameters
      ----------
-     residual: array
-          The residual image array.
-     coords: tuple
-          The (y,x) coordinates at which to estimate the residual image rms.
-     width : float, optional
-          The width of the box region within which to calculate the residual rms. The default is 20 pixels.
-     sig_clip: float, optional
-          If non-zero, the significance level at which to clip outliers.
+     residual: `array`
+          2D residual image array.
+     coords: `tuple`
+          (y,x) coordinates at which to estimate the residual image rms.
+     width : `float`, optional
+          Width of the box region within which to calculate the residual rms. default is 20 pixels.
+     sig_clip: `float`, optional
+          Rhe significance level at which to clip outliers. Default is `None`.
      '''
      
      y,x = coords
      r,mr = width/2,width%2  # The mod is added to maintain odd widths.
      res = resdiual[y-r,y+r+mr, x-r, x+r+mr].flatten()
-     if sig_clip: res = sigma_clip(res,sig_clip)
+     if sig_clip is not None: res = sigma_clip(res,sig_clip)
      rms = np.sqrt(np.mean(res**2))
      return rms
 
 
 def _rms_vs_beam(residual, beam, beam_thresh=0.1): 
+     '''
+     Estimate the rms of residual image as a function of beam response.
+
+     Parameters
+     ----------
+     residual: `array`
+          2D residual image array.
+     beam: `array`
+          2D beam image array.
+     beam_thresh : `float`, optional
+          Minimum inclusive beam value.
+     '''
      bins = np.arange(beam_thresh,1.01,.01)
      bin_centers = bins[:-1]+np.diff(bins)
      rms=np.zeros_like(bin_centers)
@@ -111,6 +129,20 @@ def _rms_vs_beam(residual, beam, beam_thresh=0.1):
 
 
 def catalog_sources(comps, meta, residual, beam):
+     '''
+     Generate catalog of source cnadidates from components.
+
+     Parameters
+     ----------
+     comps : `pandas.DataFrame`
+         Deconvolved souce components. A \'flag\' column is expected.
+     meta: `dict`
+         FHD meta data.         
+     residual: `astropy.fits.HDU` object
+         Residual image in Jy/beam.
+     beam: `astropy.fits.HDU` object
+         Beam image array.
+     '''
      cat = _calc_source_params(comps)
      wcs = WCS(beam.header)
      x,y = wcs.wcs_world2pix(cat.ra.values,cat.dec.values,1)
