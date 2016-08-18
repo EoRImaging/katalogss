@@ -14,9 +14,7 @@ setup_args = {
     'scripts': glob.glob('scripts/*'),
     'version': __version__,
     'package_data': {'katalogss': [f for f in listdir('./katalogss/data') if op.isfile(op.join('./katalogss/data', f))]},
-    # note pyfits is only a dependency because it is an aipy dependency.
-    # It should be removed when aipy is.
-    'install_requires': ['numpy', 'scipy', 'astropy>=1.2']
+    'install_requires': ['numpy', 'scipy', 'astropy>=1.2','scikit-learn','pandas','pidly']
 }
 
 if __name__ == '__main__':
