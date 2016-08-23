@@ -2,7 +2,6 @@
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
 @EXPLICIT
-Using Anaconda Cloud api site https://api.anaconda.org
 https://repo.continuum.io/pkgs/free/linux-64/_nb_ext_conf-0.2.0-py27_0.tar.bz2
 https://repo.continuum.io/pkgs/free/linux-64/alabaster-0.7.8-py27_0.tar.bz2
 https://repo.continuum.io/pkgs/free/linux-64/anaconda-4.1.1-np111py27_0.tar.bz2
